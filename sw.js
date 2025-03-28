@@ -1,57 +1,61 @@
-const CACHE_NAME = "pwa-cache-v6";
-
-// Fonction pour récupérer dynamiquement tous les fichiers audios
-async function fetchAudioFiles() {
-    const response = await fetch("/index.html"); // Charge la page principale
-    const text = await response.text(); 
-    const audioFiles = [...text.matchAll(/src=["']([^"']+\.(mp3|ogg|wav|mpga))["']/g)].map(match => match[1]);
-    return audioFiles;
-}
+const CACHE_NAME = "pwa-cache-v7";
 
 // Installation du Service Worker
-self.addEventListener("install", async (event) => {
+self.addEventListener("install", (event) => {
     console.log("🔹 Installation du Service Worker...");
 
-    // Récupération dynamique des fichiers audio
-    const audioFiles = await fetchAudioFiles();
-    
-    const ASSETS_TO_CACHE = [
-        "/",
-        "/index.html",
-        "/manifest.json",
-        "/css/main.css",
-        "/js/main.js",
-        ...audioFiles, // Ajoute automatiquement tous les fichiers audio détectés
-    ];
-
     event.waitUntil(
-        caches.open(CACHE_NAME).then((cache) => {
+        caches.open(CACHE_NAME).then(async (cache) => {
             console.log("📥 Mise en cache des fichiers...");
-            return cache.addAll(ASSETS_TO_CACHE);
+
+            // Liste des fichiers essentiels à mettre en cache
+            const ASSETS_TO_CACHE = [
+                "/",
+                "/index.html",
+                "/manifest.json",
+                "/css/main.css",
+                "/js/main.js"
+            ];
+
+            try {
+                await cache.addAll(ASSETS_TO_CACHE);
+                console.log("✅ Tous les fichiers essentiels ont été mis en cache !");
+            } catch (error) {
+                console.error("❌ Erreur lors de la mise en cache :", error);
+            }
         })
     );
 });
 
-// Activation : Suppression des anciens caches
+// Activation du Service Worker et suppression des anciens caches
 self.addEventListener("activate", (event) => {
+    console.log("✅ Service Worker activé !");
     event.waitUntil(
         caches.keys().then((cacheNames) => {
             return Promise.all(
-                cacheNames
-                    .filter((name) => name !== CACHE_NAME)
-                    .map((name) => caches.delete(name))
+                cacheNames.map((cache) => {
+                    if (cache !== CACHE_NAME) {
+                        console.log(`🗑️ Suppression du cache obsolète : ${cache}`);
+                        return caches.delete(cache);
+                    }
+                })
             );
         })
     );
-    console.log("✅ Service Worker activé !");
 });
 
-// Interception des requêtes réseau
+// Interception des requêtes réseau et récupération depuis le cache
 self.addEventListener("fetch", (event) => {
     event.respondWith(
         caches.match(event.request).then((response) => {
-            return response || fetch(event.request);
+            return response || fetch(event.request).then((fetchResponse) => {
+                return caches.open(CACHE_NAME).then((cache) => {
+                    cache.put(event.request, fetchResponse.clone());
+                    return fetchResponse;
+                });
+            });
+        }).catch(() => {
+            return caches.match("/index.html");
         })
     );
 });
-// Ajout d'un commentaire pour que Git prenne en compte le fichier
