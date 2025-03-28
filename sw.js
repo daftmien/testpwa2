@@ -1,61 +1,56 @@
+const CACHE_NAME = "pwa-cache-v6";
 
-// Nom du cache
-const CACHE_NAME = "pwa-cache-v5";
+// Fonction pour récupérer dynamiquement tous les fichiers audios
+async function fetchAudioFiles() {
+    const response = await fetch("/index.html"); // Charge la page principale
+    const text = await response.text(); 
+    const audioFiles = [...text.matchAll(/src=["']([^"']+\.(mp3|ogg|wav|mpga))["']/g)].map(match => match[1]);
+    return audioFiles;
+}
 
-// Fichiers à mettre en cache
-const ASSETS_TO_CACHE = [
-    "/",
-    "/index.html",
-    "/manifest.json",
-    "/css/view.0.0.86.css",
-    "/css/main.5a6c52f7.css",
-    "/css/css.css",
-    "/css/css_1.css",
-    "/css/css_2.css",
-    "/css/css_3.css",
-    "/css/css_4.css",
-    "/css/css2.css",
-    "/audio/sample.mp3" // Ajoute ici tous les fichiers audio nécessaires
-];
+// Installation du Service Worker
+self.addEventListener("install", async (event) => {
+    console.log("🔹 Installation du Service Worker...");
 
-// Installation du service worker et mise en cache des fichiers
-self.addEventListener("install", (event) => {
+    // Récupération dynamique des fichiers audio
+    const audioFiles = await fetchAudioFiles();
+    
+    const ASSETS_TO_CACHE = [
+        "/",
+        "/index.html",
+        "/manifest.json",
+        "/css/main.css",
+        "/js/main.js",
+        ...audioFiles, // Ajoute automatiquement tous les fichiers audio détectés
+    ];
+
     event.waitUntil(
         caches.open(CACHE_NAME).then((cache) => {
+            console.log("📥 Mise en cache des fichiers...");
             return cache.addAll(ASSETS_TO_CACHE);
         })
     );
 });
 
-// Activation et suppression des anciens caches
+// Activation : Suppression des anciens caches
 self.addEventListener("activate", (event) => {
     event.waitUntil(
         caches.keys().then((cacheNames) => {
             return Promise.all(
-                cacheNames.map((cache) => {
-                    if (cache !== CACHE_NAME) {
-                        return caches.delete(cache);
-                    }
-                })
+                cacheNames
+                    .filter((name) => name !== CACHE_NAME)
+                    .map((name) => caches.delete(name))
             );
         })
     );
+    console.log("✅ Service Worker activé !");
 });
 
-// Interception des requêtes et réponse avec le cache
+// Interception des requêtes réseau
 self.addEventListener("fetch", (event) => {
     event.respondWith(
         caches.match(event.request).then((response) => {
-            return response || fetch(event.request).then((fetchResponse) => {
-                return caches.open(CACHE_NAME).then((cache) => {
-                    if (event.request.url.startsWith("https://croiselesfingers.netlify.app/audio/")) {
-                        cache.put(event.request, fetchResponse.clone());
-                    }
-                    return fetchResponse;
-                });
-            });
-        }).catch(() => {
-            return caches.match("/index.html");
+            return response || fetch(event.request);
         })
     );
 });
