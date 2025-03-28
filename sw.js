@@ -1,28 +1,36 @@
-const CACHE_NAME = "pwa-cache-v7";
+const CACHE_NAME = "pwa-cache-v8";
+
+// Liste des fichiers essentiels à mettre en cache
+const ASSETS_TO_CACHE = [
+    "/",
+    "/index.html",
+    "/manifest.json",
+    "/css/main.css",
+    "/js/main.js",
+    "/favicon.ico" // Ajoute l'icône pour éviter l'erreur 404
+];
+
+// Fonction de mise en cache sécurisée
+async function cacheAssets(cache, assets) {
+    for (const asset of assets) {
+        try {
+            const response = await fetch(asset, { cache: "no-store" }); // Empêche la mise en cache navigateur
+            if (!response.ok) throw new Error(`❌ Échec du chargement : ${asset} (${response.status})`);
+            await cache.put(asset, response);
+            console.log(`✅ Fichier mis en cache : ${asset}`);
+        } catch (error) {
+            console.warn(error.message); // Affiche seulement un warning et continue
+        }
+    }
+}
 
 // Installation du Service Worker
 self.addEventListener("install", (event) => {
     console.log("🔹 Installation du Service Worker...");
-
     event.waitUntil(
-        caches.open(CACHE_NAME).then(async (cache) => {
+        caches.open(CACHE_NAME).then((cache) => {
             console.log("📥 Mise en cache des fichiers...");
-
-            // Liste des fichiers essentiels à mettre en cache
-            const ASSETS_TO_CACHE = [
-                "/",
-                "/index.html",
-                "/manifest.json",
-                "/css/main.css",
-                "/js/main.js"
-            ];
-
-            try {
-                await cache.addAll(ASSETS_TO_CACHE);
-                console.log("✅ Tous les fichiers essentiels ont été mis en cache !");
-            } catch (error) {
-                console.error("❌ Erreur lors de la mise en cache :", error);
-            }
+            return cacheAssets(cache, ASSETS_TO_CACHE);
         })
     );
 });
@@ -33,12 +41,9 @@ self.addEventListener("activate", (event) => {
     event.waitUntil(
         caches.keys().then((cacheNames) => {
             return Promise.all(
-                cacheNames.map((cache) => {
-                    if (cache !== CACHE_NAME) {
-                        console.log(`🗑️ Suppression du cache obsolète : ${cache}`);
-                        return caches.delete(cache);
-                    }
-                })
+                cacheNames
+                    .filter((cache) => cache !== CACHE_NAME)
+                    .map((cache) => caches.delete(cache))
             );
         })
     );
@@ -55,7 +60,7 @@ self.addEventListener("fetch", (event) => {
                 });
             });
         }).catch(() => {
-            return caches.match("/index.html");
+            return caches.match("/index.html"); // Renvoie la page d'accueil en cas d'erreur réseau
         })
     );
 });
