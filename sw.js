@@ -54,4 +54,4 @@ self.addEventListener("fetch", (event) => {
         })
     );
 });
-prout
+// Ajout d'un commentaire pour que Git prenne en compte le fichier
